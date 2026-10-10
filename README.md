@@ -98,6 +98,8 @@ All options are in `config.lua`.
 | `Config.Command` | Command that opens the radio |
 | `Config.Keybind` | Default key for the command, e.g. `'F10'` (players can rebind it) |
 | `Config.ItemCheckMs` | How often players on a channel are checked for still having the radio |
+| `Config.JoinCooldownMs` | Minimum time between channel changes per player |
+| `Config.BlockOutsideJoins` | Take players off the radio if they join a channel without using this radio |
 | `Config.CustomItemCount` | Optional item count function for unsupported inventories |
 | `Config.WalkWhileOpen` | Allow moving while the radio is open |
 | `Config.DefaultVolume` | Radio volume, 0-100 |
@@ -159,7 +161,7 @@ Place `key_up` and/or `key_down` (`.ogg`, `.mp3` or `.wav`) in `web/sounds/` and
 ## Notes
 
 - pma-voice supports one radio channel at a time, so there is no multi-channel scanning.
-- `setRadioChannel` is a client export in pma-voice, so channel restrictions can be bypassed by a cheat menu calling it directly. This applies to every radio built on pma-voice.
+- Restricted channels are also checked by pma-voice itself, so a cheat menu calling pma-voice directly can't get onto them. With `Config.BlockOutsideJoins` on, anyone who joins any channel without using this radio is taken off it. Turn it off if another script also puts players on radio channels.
 - When `radioSounds` is enabled, pma-voice's mic clicks are turned off for each player and restored when the resource stops.
 
 ## License

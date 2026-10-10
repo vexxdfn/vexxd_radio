@@ -59,6 +59,15 @@ Config.Anim = {
 
 Config.JobCacheMs = 15000
 
+-- Minimum time (ms) between channel changes per player. Extra requests in between are
+-- merged, so only the last channel picked is joined.
+Config.JoinCooldownMs = 1000
+
+-- Take anyone off the radio who joins a channel without using this radio (for example a
+-- cheat menu calling pma-voice directly). Turn off if another script also puts players
+-- on radio channels.
+Config.BlockOutsideJoins = true
+
 -- On-screen list of everyone on your channel, with who's talking lit up.
 Config.RadioList = {
     enabled         = true,

@@ -4,7 +4,7 @@ lua54 'yes'
 
 name 'vexxd_radio'
 author 'Vexxd Scripts'
-version '1.1.0'
+version '1.2.1'
 description 'Handheld radio for pma-voice. Standalone or QBCore, Qbox, ESX discord.gg/TzNJ6Z92Y5 for support'
 
 shared_scripts {
@@ -24,6 +24,7 @@ server_scripts {
     'server/inventory.lua',
     'server/list.lua',
     'server/main.lua',
+    'server/guard.lua',
 }
 
 ui_page 'web/index.html'

@@ -19,12 +19,18 @@ local BLOCKED = {
     199, 200, 322,
 }
 
+local notifyWith = 'feed'
+if GetResourceState('vexxd_notify') == 'started' then
+    notifyWith = 'vexxd'
+elseif GetResourceState('ox_lib') == 'started' then
+    notifyWith = 'ox'
+end
+
 local function notify(message, kind)
-    if GetResourceState('ox_lib') == 'started' then
-        local ok = pcall(function()
-            exports.ox_lib:notify({ type = kind or 'error', description = message })
-        end)
-        if ok then return end
+    if notifyWith == 'vexxd' then
+        if pcall(function() exports.vexxd_notify:Notify({ type = kind or 'error', description = message }) end) then return end
+    elseif notifyWith == 'ox' then
+        if pcall(function() exports.ox_lib:notify({ type = kind or 'error', description = message }) end) then return end
     end
     BeginTextCommandThefeedPost('STRING')
     AddTextComponentSubstringPlayerName(message)
@@ -272,8 +278,8 @@ RegisterNUICallback('join', function(body, cb)
             channel = result
             Voice.join(channel)
             Voice.resetRx()
-        else
-            notify(result or _L('join_failed'))
+        elseif result ~= nil then
+            notify(result)
         end
         cb({ ok = ok, channel = channel })
     end)

@@ -44,8 +44,11 @@ function List.remove(src, silent)
 end
 
 function List.set(src, ch)
+    if channelOf[src] == ch then
+        if L.enabled then TriggerClientEvent('vexxd_radio:client:list', src, ch, snapshot(ch)) end
+        return
+    end
     names[src] = nil
-    if channelOf[src] == ch then return List.push(ch) end
     if channelOf[src] then List.remove(src, true) end
     channelOf[src] = ch
     members[ch] = members[ch] or {}
