@@ -180,3 +180,11 @@ Config.Locale = 'en' -- 'en', 'es', 'fr', 'de' or 'pt'
 ```
 
 To add a language, copy `locales/en.lua` to a new file (for example `locales/it.lua`), change `Locales['en']` to `Locales['it']`, translate the text on the right, and set `Config.Locale = 'it'`. Anything you leave out falls back to English. Pull requests with new languages are welcome!
+
+## 💎 Paid Scripts
+
+Looking for more scripts? Check out the full collection of paid scripts available on my Tebex store!
+
+🛒 **[VEXXD SCRIPTS | Tebex Store](https://vexxd-scripts.tebex.store/)**
+
+
