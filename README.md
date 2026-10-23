@@ -229,4 +229,4 @@ To add a language, copy `locales/en.lua` to a new file (for example `locales/it.
 
 ## 💎 Paid Scripts
 
-[🛒 VEXXD SCRIPTS | Tebex Store](https://vexxd-scripts.tebex.store)
+[🛒 VEXXD SCRIPTS | Tebex Store](https://vexxdscripts.com)
