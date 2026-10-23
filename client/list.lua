@@ -5,7 +5,7 @@ local hidden = GetResourceKvpInt('listHidden') == 1
 local current, members = 0, {}
 
 local function labelFor(ch)
-    local def = Config.Channels[ch]
+    local def = Config.Channels[ch] or Config.Channels[math.floor(ch)]
     return def and def.label or nil
 end
 
@@ -21,6 +21,10 @@ function RadioList.refresh()
         me = GetPlayerServerId(PlayerId()),
         position = L.position,
         max = L.maxShown,
+        color = L.color,
+        talkColor = L.talkColor,
+        header = L.header or 'both',
+        mode = L.mode or 'full',
         strings = UIStrings(),
     })
 end

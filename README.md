@@ -1,13 +1,12 @@
-# vexxd_radio
+# Radio
 
 A handheld radio for FiveM built on [pma-voice](https://github.com/AvarianKnight/pma-voice). Runs standalone or with QBCore, Qbox or ESX. Use the radio item and it's instantly in your hand with a realistic radio. Walk, drive and talk with it open, then put it away and stay on your channel.
 
-# Support
-Join discord for support! http://discord.gg/TzNJ6Z92Y5
+## Support
 
-<img width="1874" height="786" alt="vexxd_phone1" src="https://github.com/user-attachments/assets/d3ac3d4f-34fd-41fb-b72a-5662d469e817" />
-<img width="1255" height="767" alt="v1 1 0" src="https://github.com/user-attachments/assets/0ca4797a-15be-4b3f-ab19-5edbb3aef0b0" />
+Join the Discord for support: https://discord.gg/TzNJ6Z92Y5
 
+<img width="1874" height="786" alt="Radio" src="https://github.com/user-attachments/assets/d3ac3d4f-34fd-41fb-b72a-5662d469e817" />
 
 ## Features
 
@@ -16,12 +15,16 @@ Join discord for support! http://discord.gg/TzNJ6Z92Y5
 - Walk and drive while it's open (mouse look and weapons are blocked)
 - Keypad, channel and volume knobs, nav rocker, mute and power keys
 - Type a channel on the keypad or click the screen and use your keyboard
-- Restricted channels by job or ACE permission, with labels
+- Restricted channels by job or ACE permission, with labels. Lose the job and you're taken off the channel
+- Decimal channels like `100.5`, with sub channels following their main channel's rules
+- Saved presets: hold a number to save a channel, press OK to cycle them, or bind keys to jump straight to one
+- Goes quiet while you're dead or downed and puts you back on your channel when you get up
 - TX/RX lights and an in-game clock on the screen
-- On-screen channel list showing everyone on your channel, with whoever's talking lit up (works for several people at once)
+- On-screen channel list showing everyone on your channel, with whoever's talking lit up (works for several people at once). It moves aside while the radio is open, and its colors can be changed
 - Optional `/radioname` to set the name others see on the list (off by default, turn on with `allowNameChange` in the config)
 - The radio's screen shows who you're hearing, plus signal and glow effects when sending or receiving
 - `/radiolist` to hide or show the list
+- List options for serious servers: show only who's talking, limit the list to jobs like police and EMS, and pick what the top of the list shows
 - Beep when you start and stop talking (replaces pma-voice mic clicks)
 - Translated into English, Spanish, French, German and Portuguese, and easy to add more
 - Custom sounds: drop your own clips in `web/sounds/`
@@ -30,7 +33,6 @@ Join discord for support! http://discord.gg/TzNJ6Z92Y5
 - Works with all major inventories
 - Leaving a channel automatically if the radio is dropped, given away or removed
 - No database, no bridge resource
-- 0.00ms resmon while idle
 
 ## Requirements
 
@@ -106,10 +108,15 @@ All options are in `config.lua`.
 | `Config.WalkWhileOpen` | Allow moving while the radio is open |
 | `Config.DefaultVolume` | Radio volume, 0-100 |
 | `Config.MinChannel` / `Config.MaxChannel` | Allowed channel range |
+| `Config.Decimals` | Decimal places allowed in a channel: `0`, `1` (100.5) or `2` (100.25) |
+| `Config.Presets` | Saved channel slots, how many, and the command/keybind name |
+| `Config.OffWhenDown` | Take players off the radio while dead or downed |
+| `Config.RejoinOnRevive` | Put them back on the same channel when they get up |
 | `Config.Channels` | Restricted channels, their jobs and screen labels |
 | `Config.UI.scale` | Size of the radio on screen |
 | `Config.UI.keySounds` | Beep on key presses |
 | `Config.UI.radioSounds` | Beep when you start and stop talking |
+| `Config.RadioList` | Channel list position, size, and the `/radiolist` and `/radioname` commands |
 
 ### Restricted channels
 
@@ -121,6 +128,42 @@ Config.Channels = {
 ```
 
 A player can join if their job is listed **or** they have the ACE permission. Any channel not listed is open to everyone. Use either or both.
+
+Sub channels follow their main channel, so `1.5` uses the rules for `1`. Players who lose the job are taken off the channel right away.
+
+## Channel list
+
+Everything is under `Config.RadioList` in `config.lua`.
+
+| Option | Description |
+| --- | --- |
+| `color` | Color of the channel tag at the top of the list (blue by default) |
+| `talkColor` | Color of whoever is talking (green by default) |
+| `header` | `'both'` shows `LEO MAIN 1`, `'label'` shows `LEO MAIN`, `'channel'` shows `1`, `'none'` hides the top |
+| `mode` | `'full'` lists everyone on the channel. `'talking'` only pops up with whoever is talking |
+| `jobs` | `false` lets everyone see the list. A list like `{ 'police', 'ambulance' }` limits it to those jobs. Everyone else still hears the radio, just without names |
+| `ace` | Players with this ace always see the list |
+
+A setup for a serious server:
+
+```lua
+header = 'channel',
+mode   = 'talking',
+jobs   = { 'police', 'ambulance' },
+```
+
+## Presets
+
+Each character gets their own saved channels (4 by default, set with `Config.Presets.slots`).
+
+- Hold a number on the keypad to save the current channel to that slot. The screen shows `SAVED P2`.
+- Press OK on the radio to jump to the next saved channel.
+- `/radiopreset 2` joins preset 2, radio open or not.
+- Players can bind a key to each preset in **Settings > Key Bindings > FiveM**.
+
+## Dead or downed
+
+With `Config.OffWhenDown` on, players are taken off the radio when they die or go down (Qbox, QBCore and ESX deaths, plus plain GTA deaths on standalone servers) and can't join a channel until they get up. With `Config.RejoinOnRevive` on, they go back to the same channel when revived.
 
 ## Standalone
 
@@ -149,12 +192,15 @@ Place `key_up` and/or `key_down` (`.ogg`, `.mp3` or `.wav`) in `web/sounds/` and
 
 | Control | Action |
 | --- | --- |
-| Keypad | Enter a channel, ✓ to join, ✕ to delete |
+| Keypad | Enter a channel, `.` for a decimal, ✓ to join |
+| Hold 1-4 | Save the current channel to that preset |
+| Soft keys while typing | DEL, CLR, ENT |
+| ✕ key (with `Config.Decimals = 0`) | Delete, in place of `.` |
 | Channel knob (scroll) | Tune up or down |
 | Volume knob (scroll) | Volume up or down |
 | Rocker ▲ ▼ | Tune up or down |
 | Rocker ◀ ▶ | Volume down or up |
-| OK | Confirm |
+| OK | Confirm, or jump to the next preset |
 | Power key | Leave channel |
 | Mute key | Mute / unmute |
 | Click the screen | Type a channel with your keyboard |
@@ -183,8 +229,4 @@ To add a language, copy `locales/en.lua` to a new file (for example `locales/it.
 
 ## 💎 Paid Scripts
 
-Looking for more scripts? Check out the full collection of paid scripts available on my Tebex store!
-
-🛒 **[VEXXD SCRIPTS | Tebex Store](https://vexxdscripts.com/)**
-
-
+[🛒 VEXXD SCRIPTS | Tebex Store](https://vexxd-scripts.tebex.store)

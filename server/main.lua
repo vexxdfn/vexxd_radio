@@ -1,13 +1,21 @@
 local jobCache = {}
 local onRadio = {}
 local lastJoin, queued = {}, {}
+local scale = 10 ^ math.max(0, math.min(2, math.floor(Config.Decimals or 0)))
 
 local function toChannel(value)
     local n = tonumber(value)
     if not n or n ~= n then return nil end
-    n = math.floor(n)
+    n = math.floor(n * scale + 0.5) / scale
+    if n == math.floor(n) then n = math.floor(n) end
     if n < Config.MinChannel or n > Config.MaxChannel then return nil end
     return n
+end
+
+RadioToChannel = toChannel
+
+local function ruleFor(channel)
+    return Config.Channels[channel] or Config.Channels[math.floor(channel)]
 end
 
 local function cachedJob(src)
@@ -19,38 +27,56 @@ local function cachedJob(src)
     return job
 end
 
+local function allowedOn(src, channel)
+    local rule = ruleFor(channel)
+    local hasJobs = rule and rule.jobs and #rule.jobs > 0
+    if not rule or (not hasJobs and not rule.ace) then return true end
+    if rule.ace and IsPlayerAceAllowed(src, rule.ace) then return true end
+    if hasJobs then
+        local job = cachedJob(src)
+        for i = 1, #rule.jobs do
+            if rule.jobs[i] == job then return true end
+        end
+    end
+    return false
+end
+
 local function canJoin(src, value)
     if not Inventory.hasRadio(src) then return false, _L('need_radio') end
 
     local channel = toChannel(value)
     if not channel then return false, _L('invalid_channel') end
 
-    local rule = Config.Channels[channel]
-    local hasJobs = rule and rule.jobs and #rule.jobs > 0
-    if not rule or (not hasJobs and not rule.ace) then
-        return true, nil, channel
+    if not allowedOn(src, channel) then
+        return false, _L('restricted', tostring(channel))
     end
-
-    if rule.ace and IsPlayerAceAllowed(src, rule.ace) then
-        return true, nil, channel
-    end
-
-    if hasJobs then
-        local job = cachedJob(src)
-        for i = 1, #rule.jobs do
-            if rule.jobs[i] == job then return true, nil, channel end
-        end
-    end
-
-    return false, _L('restricted', channel)
+    return true, nil, channel
 end
 
 RadioCanJoin = canJoin
+RadioJobOf = cachedJob
+
+local function takeOff(src, event, ...)
+    local channel = onRadio[src]
+    onRadio[src] = nil
+    Guard.clear(src)
+    List.remove(src)
+    pcall(function() exports['pma-voice']:setPlayerRadio(src, 0) end)
+    TriggerClientEvent(event, src, ...)
+    return channel
+end
 
 local function doJoin(src, value, token)
+    local slot = type(value) == 'string' and tonumber(value:match('^p(%d)$'))
+    if slot then
+        value = Presets and Presets.get(src, slot) or 0
+        if value == 0 then
+            return TriggerClientEvent('vexxd_radio:client:joinResult', src, token, false, _L('preset_empty', slot))
+        end
+    end
     local ok, reason, channel = canJoin(src, value)
     if ok then
-        onRadio[src] = true
+        onRadio[src] = channel
         Guard.allow(src, channel)
         List.set(src, channel)
     end
@@ -95,19 +121,42 @@ AddEventHandler('playerDropped', function()
     Guard.clear(source)
 end)
 
+local function recheck(src)
+    local channel = onRadio[src]
+    if not channel then return end
+    if not GetPlayerName(src) then
+        onRadio[src] = nil
+    elseif Config.RequireItem and not Inventory.hasRadio(src) then
+        takeOff(src, 'vexxd_radio:client:forceOff')
+    elseif not allowedOn(src, channel) then
+        takeOff(src, 'vexxd_radio:client:kicked', channel)
+    end
+end
+
+-- Job changes take effect right away instead of waiting for the next check.
+local function onJobChange(src)
+    src = tonumber(src)
+    if not src or not onRadio[src] then return end
+    jobCache[src] = nil
+    recheck(src)
+    if onRadio[src] then List.refresh(src) end
+end
+
 CreateThread(function()
-    if not Config.RequireItem then return end
+    while not Bridge.ready do Wait(250) end
+    if Bridge.name == 'qb' or Bridge.name == 'qbx' then
+        AddEventHandler('QBCore:Server:OnJobUpdate', function(src) onJobChange(src) end)
+    elseif Bridge.name == 'esx' then
+        AddEventHandler('esx:setJob', function(src) onJobChange(src) end)
+    end
+end)
+
+local hasRules = next(Config.Channels) ~= nil
+
+CreateThread(function()
+    if not Config.RequireItem and not hasRules then return end
     while true do
         Wait(Config.ItemCheckMs)
-        for src in pairs(onRadio) do
-            if not GetPlayerName(src) then
-                onRadio[src] = nil
-            elseif not Inventory.hasRadio(src) then
-                onRadio[src] = nil
-                Guard.clear(src)
-                List.remove(src)
-                TriggerClientEvent('vexxd_radio:client:forceOff', src)
-            end
-        end
+        for src in pairs(onRadio) do recheck(src) end
     end
 end)

@@ -192,6 +192,8 @@ function openRadio()
         labels = labels,
         min = Config.MinChannel,
         max = Config.MaxChannel,
+        decimals = Config.Decimals or 0,
+        presets = Config.Presets and Config.Presets.enabled and (Config.Presets.slots or 4) or 0,
         scale = Config.UI.scale,
         sounds = Config.UI.keySounds,
         strings = UIStrings(),
@@ -199,6 +201,7 @@ function openRadio()
 
     pushClock(true)
     RadioList.refresh()
+    if Config.Presets and Config.Presets.enabled then TriggerServerEvent('vexxd_radio:server:presets') end
     CreateThread(raise)
     CreateThread(controlLoop)
 end
@@ -225,12 +228,20 @@ local function toggle()
     if isOpen then closeRadio() else openRadio() end
 end
 
+local function setChannel(value)
+    channel = value
+    Voice.join(channel)
+    Voice.resetRx()
+    if isOpen then SendNUIMessage({ action = 'channel', channel = channel }) end
+end
+
 local function leaveChannel()
     if channel == 0 then return end
     channel = 0
     Voice.leave()
     Voice.resetRx()
     TriggerServerEvent('vexxd_radio:server:left')
+    if isOpen then SendNUIMessage({ action = 'channel', channel = 0 }) end
 end
 
 local function forceOff()
@@ -238,9 +249,73 @@ local function forceOff()
     leaveChannel()
 end
 
+-- Off when dead or downed, back on the same channel when up again.
+local downChannel = nil
+local downBy = {}
+local isDown = false
+
+local function updateDown()
+    local now = false
+    for _, v in pairs(downBy) do if v then now = true break end end
+    if now == isDown then return end
+    isDown = now
+    if isDown then
+        if channel ~= 0 then
+            downChannel = Config.RejoinOnRevive and channel or nil
+            forceOff()
+            notify(_L('down_off'), 'inform')
+        elseif isOpen then
+            closeRadio()
+        end
+    elseif downChannel then
+        local back = downChannel
+        downChannel = nil
+        requestJoin(back, function(ok, result)
+            if ok then setChannel(result) end
+        end)
+    end
+end
+
+local function setDown(reason, value)
+    if not Config.OffWhenDown then return end
+    downBy[reason] = value == true
+    updateDown()
+end
+
+if Config.OffWhenDown then
+    RegisterNetEvent('QBCore:Player:SetPlayerData', function(data)
+        local m = type(data) == 'table' and data.metadata
+        if m then setDown('meta', m.isdead == true or m.inlaststand == true) end
+    end)
+    AddEventHandler('esx:onPlayerDeath', function() setDown('esx', true) end)
+    AddEventHandler('esx:onPlayerSpawn', function() setDown('esx', false) end)
+    AddStateBagChangeHandler('isDead', ('player:%s'):format(GetPlayerServerId(PlayerId())), function(_, _, value)
+        setDown('state', value == true)
+    end)
+
+    CreateThread(function()
+        while true do
+            if channel ~= 0 or downChannel or isDown then
+                setDown('ped', IsEntityDead(PlayerPedId()))
+                Wait(1000)
+            else
+                Wait(2500)
+            end
+        end
+    end)
+end
+
 exports('useRadio', toggle)
 RegisterNetEvent('vexxd_radio:client:toggleRadio', toggle)
 RegisterNetEvent('vexxd_radio:client:forceOff', forceOff)
+RegisterNetEvent('vexxd_radio:client:kicked', function(ch)
+    leaveChannel()
+    notify(_L('removed', tostring(ch)))
+end)
+
+RegisterNetEvent('vexxd_radio:client:presets', function(list)
+    SendNUIMessage({ action = 'presets', list = list })
+end)
 RegisterNetEvent('vexxd_radio:client:notify', notify)
 
 if Config.Command and Config.Command ~= '' then
@@ -273,17 +348,57 @@ RegisterNUICallback('join', function(body, cb)
     local value = tonumber(body and body.channel)
     if not value then return cb({ ok = false, channel = channel }) end
 
+    if isDown then
+        notify(_L('down_off'))
+        return cb({ ok = false, channel = channel })
+    end
     requestJoin(value, function(ok, result)
         if ok then
-            channel = result
-            Voice.join(channel)
-            Voice.resetRx()
+            setChannel(result)
         elseif result ~= nil then
             notify(result)
         end
         cb({ ok = ok, channel = channel })
     end)
 end)
+
+RegisterNUICallback('savePreset', function(body, cb)
+    local slot = tonumber(body and body.slot)
+    if slot and channel ~= 0 then TriggerServerEvent('vexxd_radio:server:savePreset', slot, channel) end
+    cb({ ok = true })
+end)
+
+local P = Config.Presets
+if P and P.enabled and P.command and P.command ~= '' then
+    local slots = math.max(1, math.min(9, math.floor(P.slots or 4)))
+
+    local function usePreset(slot)
+        slot = math.floor(tonumber(slot) or 0)
+        if slot < 1 or slot > slots then return end
+        if isDown then return notify(_L('down_off')) end
+        requestJoin('p' .. slot, function(ok, result)
+            if ok then
+                setChannel(result)
+                notify(_L('preset_join', tostring(result)), 'inform')
+            elseif result ~= nil then
+                notify(result)
+            end
+        end)
+    end
+
+    RegisterCommand(P.command, function(_, args) usePreset(args[1]) end, false)
+    for i = 1, slots do
+        RegisterCommand(P.command .. i, function() usePreset(i) end, false)
+        RegisterKeyMapping(P.command .. i, _L('keymap_preset', i), 'keyboard', '')
+    end
+
+    CreateThread(function()
+        TriggerEvent('chat:addSuggestion', '/' .. P.command, _L('suggest_preset'), {
+            { name = 'slot', help = ('1-%d'):format(slots) },
+        })
+        for i = 1, slots do TriggerEvent('chat:removeSuggestion', '/' .. P.command .. i) end
+    end)
+end
 
 RegisterNUICallback('leave', function(_, cb)
     leaveChannel()

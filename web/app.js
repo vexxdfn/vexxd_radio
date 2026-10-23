@@ -19,21 +19,50 @@ const state = {
   tx: false,
   rx: false,
   clock: '--:--',
+  decimals: 0,
+  slots: 0,
+  presets: [],
+  note: '',
 };
 
 const T = {
   ui_no_channel: 'NO CHANNEL', ui_enter: 'ENTER CHANNEL', ui_tuning: 'TUNING', ui_channel: 'CHANNEL',
   ui_unknown: 'UNKNOWN', ui_radio: 'Radio', ui_more: '+%s more',
   ui_soft_down: '\u25C0 CH', ui_soft_off: 'OFF', ui_soft_up: 'CH \u25B6',
+  ui_del: 'DEL', ui_clr: 'CLR', ui_ent: 'ENT', ui_saved: 'SAVED P%s',
 };
 const fmt = (s, v) => String(s).replace('%s', v);
 
 function applyStrings(strings) {
   if (!strings) return;
   Object.assign(T, strings);
-  $('#soft-down').textContent = T.ui_soft_down;
-  $('#soft-off').textContent = T.ui_soft_off;
-  $('#soft-up').textContent = T.ui_soft_up;
+}
+
+const intDigits = () => Math.max(3, String(Math.floor(state.max)).length);
+
+function roundCh(n) {
+  const m = Math.pow(10, state.decimals);
+  return Math.round(n * m) / m;
+}
+
+function fmtCh(n) {
+  if (!n) return '---';
+  const whole = Math.floor(n);
+  const head = String(whole).padStart(intDigits(), '0');
+  if (n === whole) return head;
+  return head + '.' + String(n).split('.')[1];
+}
+
+const labelFor = (n) => state.labels[String(n)] || state.labels[String(Math.floor(n))];
+const presetOf = (n) => state.presets.indexOf(n) + 1;
+
+let noteTimer = null;
+function note(text, slot) {
+  state.note = text;
+  state.noteSlot = slot || 0;
+  render();
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => { state.note = ''; render(); }, 1400);
 }
 
 const list = { show: false, channel: 0, label: null, members: [], me: 0, position: 'top-right', max: 12 };
@@ -51,31 +80,89 @@ function incoming() {
   return names;
 }
 
+function hexRgb(hex) {
+  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(String(hex || ''));
+  return m ? [1, 2, 3].map((i) => parseInt(m[i], 16)) : null;
+}
+
+const mixRgb = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+const css = (c, alpha) => (alpha === undefined ? `rgb(${c.join(',')})` : `rgba(${c.join(',')},${alpha})`);
+
+let appliedColors = '';
+function applyColors(el) {
+  const key = `${list.color}|${list.talkColor}`;
+  if (key === appliedColors) return;
+  appliedColors = key;
+  const c = hexRgb(list.color);
+  if (c) {
+    el.style.setProperty('--lc', css(c));
+    el.style.setProperty('--lc-rgb', c.join(','));
+    el.style.setProperty('--lc-text', css(mixRgb(c, [228, 232, 238], 0.55)));
+    el.style.setProperty('--lc-hi', css(mixRgb(c, [255, 255, 255], 0.82)));
+    el.style.setProperty('--lc-dim', css(mixRgb(c, [150, 156, 166], 0.6)));
+    el.style.setProperty('--lc-bg1', css(mixRgb(c, [6, 8, 12], 0.82), 0.92));
+    el.style.setProperty('--lc-bg2', css(mixRgb(c, [4, 5, 8], 0.9), 0.92));
+  }
+  const t = hexRgb(list.talkColor);
+  if (t) {
+    el.style.setProperty('--tk', css(t));
+    el.style.setProperty('--tk-rgb', t.join(','));
+  }
+}
+
+const lastTalk = new Map();
+let listTimer = null;
+const HOLD_MS = 1200;
+
+function headerHtml(count) {
+  const h = list.header || 'both';
+  if (h === 'none') return '';
+  const label = esc(list.label || T.ui_radio);
+  const ch = `<em>${esc(list.channel)}</em>`;
+  const title = h === 'label' ? label : h === 'channel' ? ch : `${label} ${ch}`;
+  const icon = '<svg viewBox="0 0 24 24"><path d="M7 2h2v5h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm1 8v3h8v-3zm1 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>';
+  return `<div class="rl-head">${icon}<b>${title}</b>${count !== null ? `<span class="rl-count">${count}</span>` : ''}</div>`;
+}
+
+function rowHtml(m) {
+  return `
+      <div class="rl-row${talking.has(m.id) ? ' talk' : ''}${m.id === list.me ? ' me' : ''}" data-id="${m.id}">
+        <span class="rl-wave"><i></i><i></i><i></i><i></i></span>
+        <span class="rl-name">${esc(m.name)}</span>
+      </div>`;
+}
+
 function renderList() {
   const el = $('#radiolist');
   if (!list.show || !list.channel) { el.hidden = true; return; }
   el.className = 'rl pos-' + (list.position || 'top-right');
-  const title = list.label ? `${esc(list.label)} <em>${list.channel}</em>` : `${esc(T.ui_radio)} <em>${list.channel}</em>`;
+  applyColors(el);
+
+  if (list.mode === 'talking') {
+    const now = Date.now();
+    const live = list.members.filter((m) => m.id !== list.me && (talking.has(m.id) || (lastTalk.get(m.id) || 0) > now));
+    if (!live.length) { el.hidden = true; return; }
+    el.innerHTML = headerHtml(null) + live.slice(0, list.max || 12).map(rowHtml).join('');
+    el.hidden = false;
+    return;
+  }
+
   const shown = list.members.slice(0, list.max || 12);
   const extra = list.members.length - shown.length;
-  el.innerHTML = `
-    <div class="rl-head">
-      <svg viewBox="0 0 24 24"><path d="M7 2h2v5h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm1 8v3h8v-3zm1 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>
-      <b>${title}</b><span class="rl-count">${list.members.length}</span>
-    </div>
-    ${shown.map((m) => `
-      <div class="rl-row${talking.has(m.id) ? ' talk' : ''}${m.id === list.me ? ' me' : ''}" data-id="${m.id}">
-        <span class="rl-wave"><i></i><i></i><i></i><i></i></span>
-        <span class="rl-name">${esc(m.name)}</span>
-      </div>`).join('')}
-    ${extra > 0 ? `<div class="rl-more">${esc(fmt(T.ui_more, extra))}</div>` : ''}`;
+  el.innerHTML = headerHtml(list.members.length) + shown.map(rowHtml).join('') +
+    (extra > 0 ? `<div class="rl-more">${esc(fmt(T.ui_more, extra))}</div>` : '');
   el.hidden = false;
 }
 
 function setTalking(id, on) {
-  if (on) talking.add(id); else talking.delete(id);
-  const row = document.querySelector(`#radiolist .rl-row[data-id="${id}"]`);
-  if (row) row.classList.toggle('talk', on);
+  if (on) { talking.add(id); lastTalk.delete(id); } else if (talking.delete(id)) { lastTalk.set(id, Date.now() + HOLD_MS); }
+  if (list.mode === 'talking') {
+    renderList();
+    if (!on) { clearTimeout(listTimer); listTimer = setTimeout(renderList, HOLD_MS + 30); }
+  } else {
+    const row = document.querySelector(`#radiolist .rl-row[data-id="${id}"]`);
+    if (row) row.classList.toggle('talk', on);
+  }
   if (state.open) render();
 }
 
@@ -174,7 +261,6 @@ function beep(freq = 1450, dur = 0.035) {
   try { tone(freq, dur, 0.035, 'square'); } catch { }
 }
 
-const pad3 = (n) => String(n).padStart(3, '0');
 
 function render() {
   const lcd = $('#lcd');
@@ -186,23 +272,37 @@ function render() {
   chEl.classList.toggle('entering', !!state.entry);
   chEl.classList.toggle('tuning', state.tuning !== null && !state.entry);
 
+  let shown;
   if (state.entry) {
-    chEl.textContent = (state.entry + '___').slice(0, 3);
+    shown = state.entry.includes('.') ? state.entry : (state.entry + '___').slice(0, Math.max(3, state.entry.length));
     label.textContent = T.ui_enter;
   } else if (state.tuning !== null) {
-    chEl.textContent = pad3(state.tuning);
-    label.textContent = state.labels[String(state.tuning)] || T.ui_tuning;
+    shown = fmtCh(state.tuning);
+    label.textContent = labelFor(state.tuning) || T.ui_tuning;
   } else if (state.channel) {
-    chEl.textContent = pad3(state.channel);
+    shown = fmtCh(state.channel);
     const rx = state.rx && !state.tx ? incoming() : [];
     label.textContent = rx.length
       ? `\u25B8 ${rx[0]}${rx.length > 1 ? ` +${rx.length - 1}` : ''}`
-      : (state.labels[String(state.channel)] || T.ui_channel);
+      : (labelFor(state.channel) || T.ui_channel);
     label.classList.toggle('rxname', rx.length > 0);
   } else {
-    chEl.textContent = '---';
+    shown = '---';
     label.textContent = T.ui_no_channel;
   }
+  if (state.note) label.textContent = state.note;
+  chEl.textContent = shown;
+  chEl.classList.toggle('long', shown.length > 4);
+  chEl.classList.toggle('longer', shown.length > 5);
+
+  const p = state.channel && !state.entry && state.tuning === null ? presetOf(state.channel) : 0;
+  const z = state.note && state.noteSlot ? state.noteSlot : p;
+  $('#zone').textContent = z ? 'P' + z : 'Z1';
+
+  const typing = !!state.entry;
+  $('#soft-down').textContent = typing ? T.ui_del : T.ui_soft_down;
+  $('#soft-off').textContent = typing ? T.ui_clr : T.ui_soft_off;
+  $('#soft-up').textContent = typing ? T.ui_ent : T.ui_soft_up;
 
   const lit = Math.round(state.volume / 20);
   document.querySelectorAll('#vol-bars i').forEach((el, i) => el.classList.toggle('on', i < lit));
@@ -224,10 +324,10 @@ function render() {
 }
 
 async function join(value) {
-  const ch = Number(value);
+  const ch = roundCh(Number(value));
   state.entry = '';
   state.tuning = null;
-  if (!ch || ch < state.min || ch > state.max) { render(); return; }
+  if (!ch || ch < state.min || ch > state.max) { beep(420, 0.12); render(); return; }
   const res = await post('join', { channel: ch });
   state.channel = res.channel ?? state.channel;
   beep(res.ok ? 1900 : 420, res.ok ? 0.05 : 0.12);
@@ -246,7 +346,7 @@ async function leave() {
 
 let stepTimer = null;
 function step(delta) {
-  const base = state.tuning ?? (state.channel || state.min - (delta > 0 ? 1 : 0));
+  const base = Math.floor(state.tuning ?? (state.channel || state.min - (delta > 0 ? 1 : 0)));
   let next = base + delta;
   if (next > state.max) next = state.min;
   if (next < state.min) next = state.max;
@@ -282,13 +382,28 @@ function toggleMute() {
   }
 }
 
+function nextPreset() {
+  const saved = state.presets.map((c, i) => ({ c, i })).filter((x) => x.c > 0);
+  if (!saved.length) { beep(900); return; }
+  const at = presetOf(state.channel) - 1;
+  const next = saved.find((x) => x.i > at) || saved[0];
+  join(next.c);
+}
+
 function confirm() {
   if (state.entry) return join(state.entry);
   if (state.tuning !== null) {
     clearTimeout(stepTimer);
     return join(state.tuning);
   }
-  beep(900);
+  nextPreset();
+}
+
+function validEntry(v) {
+  const re = state.decimals > 0
+    ? new RegExp(`^\\d{0,${intDigits()}}(\\.\\d{0,${state.decimals}})?$`)
+    : new RegExp(`^\\d{0,${intDigits()}}$`);
+  return re.test(v);
 }
 
 function pressKey(key) {
@@ -297,17 +412,42 @@ function pressKey(key) {
     state.entry = state.entry.slice(0, -1);
   } else if (key === 'ent') {
     return confirm();
-  } else if (/^\d$/.test(key) && state.entry.length < 3) {
+  } else if (key === 'dot' || /^\d$/.test(key)) {
+    const next = state.entry + (key === 'dot' ? (state.entry ? '.' : '0.') : key);
+    if (!validEntry(next)) { beep(500, 0.05); return; }
     beep();
     state.tuning = null;
-    state.entry += key;
+    state.entry = next;
   }
   render();
+}
+
+function savePreset(slot) {
+  if (!state.channel) { beep(420, 0.12); return; }
+  state.presets[slot - 1] = state.channel;
+  post('savePreset', { slot });
+  beep(1900, 0.05);
+  setTimeout(() => beep(2300, 0.05), 90);
+  note(fmt(T.ui_saved, slot), slot);
+}
+
+function setKeypadMode() {
+  const k = document.querySelector('.keypad [data-key="clr"], .keypad [data-key="dot"]');
+  if (state.decimals > 0) {
+    k.dataset.key = 'dot';
+    k.classList.add('key-dot');
+    k.innerHTML = '.<small>DOT</small>';
+  } else {
+    k.dataset.key = 'clr';
+    k.classList.remove('key-dot');
+    k.innerHTML = '\u2715<small>CLR</small>';
+  }
 }
 
 function close() {
   state.open = false;
   $('#radio').hidden = true;
+  document.body.classList.remove('radio-open');
   post('close', {});
 }
 
@@ -315,16 +455,40 @@ $('#radio').addEventListener('pointerdown', (e) => {
   if (e.target.closest('button, .knob')) flash();
 });
 
-document.querySelector('.keypad').addEventListener('click', (e) => {
+let holdTimer = null;
+let held = false;
+const keypad = document.querySelector('.keypad');
+
+keypad.addEventListener('pointerdown', (e) => {
   const k = e.target.closest('[data-key]');
-  if (k) pressKey(k.dataset.key);
+  held = false;
+  clearTimeout(holdTimer);
+  if (!k || state.entry) return;
+  const slot = Number(k.dataset.key);
+  if (!slot || slot > state.slots) return;
+  holdTimer = setTimeout(() => { held = true; savePreset(slot); }, 650);
+});
+['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => keypad.addEventListener(ev, () => clearTimeout(holdTimer)));
+
+keypad.addEventListener('click', (e) => {
+  const k = e.target.closest('[data-key]');
+  if (!k) return;
+  if (held) { held = false; return; }
+  pressKey(k.dataset.key);
 });
 
 document.querySelector('.softkeys').addEventListener('click', (e) => {
   const s = e.target.closest('[data-soft]');
   if (!s) return;
-  if (s.dataset.soft === 'up') step(1);
-  else if (s.dataset.soft === 'down') step(-1);
+  const soft = s.dataset.soft;
+  if (state.entry) {
+    if (soft === 'down') pressKey('clr');
+    else if (soft === 'off') { state.entry = ''; beep(900); render(); }
+    else confirm();
+    return;
+  }
+  if (soft === 'up') step(1);
+  else if (soft === 'down') step(-1);
   else leave();
 });
 
@@ -349,7 +513,9 @@ const input = $('#lcd-input');
 input.addEventListener('focus', () => post('typing', { value: true }));
 input.addEventListener('blur', () => post('typing', { value: false }));
 input.addEventListener('input', () => {
-  input.value = input.value.replace(/\D/g, '').slice(0, 3);
+  let v = input.value.replace(state.decimals > 0 ? /[^\d.]/g : /\D/g, '');
+  while (v && !validEntry(v)) v = v.slice(0, -1);
+  input.value = v;
   state.entry = input.value;
   state.tuning = null;
   render();
@@ -387,12 +553,18 @@ window.addEventListener('message', (e) => {
       state.labels = d.labels || {};
       state.min = d.min || 1;
       state.max = d.max || 999;
+      state.decimals = Math.max(0, Math.min(2, d.decimals || 0));
+      state.slots = d.presets || 0;
+      input.maxLength = intDigits() + (state.decimals ? state.decimals + 1 : 0);
+      input.inputMode = state.decimals ? 'decimal' : 'numeric';
+      setKeypadMode();
       state.keySounds = d.sounds !== false;
       applyStrings(d.strings);
       state.entry = '';
       state.tuning = null;
       document.documentElement.style.setProperty('--scale', d.scale || 1);
       $('#radio').hidden = false;
+      document.body.classList.add('radio-open');
       const lcd = $('#lcd');
       lcd.classList.remove('boot');
       void lcd.offsetWidth;
@@ -405,6 +577,7 @@ window.addEventListener('message', (e) => {
       state.open = false;
       if (document.activeElement === input) input.blur();
       $('#radio').hidden = true;
+      document.body.classList.remove('radio-open');
       break;
 
     case 'clock':
@@ -422,6 +595,17 @@ window.addEventListener('message', (e) => {
       break;
     }
 
+    case 'channel':
+      state.channel = d.channel || 0;
+      if (!state.channel) state.rx = false;
+      if (state.open) render();
+      break;
+
+    case 'presets':
+      state.presets = Array.isArray(d.list) ? d.list.map(Number) : [];
+      if (state.open) render();
+      break;
+
     case 'rx':
       state.rx = !!d.value;
       if (state.open) render();
@@ -435,6 +619,10 @@ window.addEventListener('message', (e) => {
       list.me = d.me || 0;
       list.position = d.position || 'top-right';
       list.max = d.max || 12;
+      list.color = d.color || null;
+      list.talkColor = d.talkColor || null;
+      list.header = d.header || 'both';
+      list.mode = d.mode || 'full';
       applyStrings(d.strings);
       if (!list.channel) talking.clear();
       renderList();
@@ -447,6 +635,8 @@ window.addEventListener('message', (e) => {
 
     case 'talkReset':
       talking.clear();
+      lastTalk.clear();
+      if (list.mode === 'talking') renderList();
       document.querySelectorAll('#radiolist .rl-row.talk').forEach((r) => r.classList.remove('talk'));
       if (state.open) render();
       break;

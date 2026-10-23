@@ -31,8 +31,27 @@ Config.DefaultVolume = 50 -- 0-100
 Config.MinChannel = 1
 Config.MaxChannel = 999
 
+-- Decimal places allowed in a channel: 0 = whole channels only, 1 = 100.5, 2 = 100.25.
+-- Sub channels like 1.5 follow the rules of channel 1 below.
+Config.Decimals = 1
+
+-- Saved channels players can jump to. Hold a number on the keypad to save the current
+-- channel to that slot, press OK to cycle through them, or bind keys to them in
+-- Settings > Key Bindings > FiveM. /radiopreset 2 also works.
+Config.Presets = {
+    enabled = true,
+    slots   = 4,
+    command = 'radiopreset', -- '' to disable the command and keybinds
+}
+
+-- Take players off the radio while they're dead or downed, and put them back on the
+-- same channel when they get up.
+Config.OffWhenDown = true
+Config.RejoinOnRevive = true
+
 -- Restricted channels. Any channel not listed is open to everyone.
 -- A player can join if their job is listed OR they have the ace permission.
+-- Players who lose the job are taken off the channel.
 -- Standalone servers: use ace only (see README).
 Config.Channels = {
     [1] = { label = 'LEO MAIN', jobs = { 'police' }, ace = 'vexxd_radio.leo' },
@@ -74,6 +93,21 @@ Config.RadioList = {
     position        = 'middle-right', -- 'middle-right', 'middle-left', 'top-right' or 'top-left'
     showWhenClosed  = true,        -- keep the list on screen after putting the radio away
     maxShown        = 12,          -- names shown before it says "+X more"
+    color           = '#78aaff',   -- color of the channel tag at the top
+    talkColor       = '#41e08a',   -- color of whoever is talking
+
+    -- 'both' shows "LEO MAIN 1", 'label' shows "LEO MAIN", 'channel' shows "1", 'none' hides the top
+    header          = 'both',
+
+    -- 'full' lists everyone on the channel. 'talking' only pops up with whoever is
+    -- talking, like the caller ID on a real radio.
+    mode            = 'full',
+
+    -- Who sees the list. false = everyone, or a list of jobs like { 'police', 'ambulance' }.
+    -- Players with the ace below always see it. Everyone else hears the radio without names.
+    jobs            = false,
+    ace             = 'vexxd_radio.list',
+
     toggleCommand   = 'radiolist', -- hides/shows the list for that player. '' to disable
     allowNameChange = false,       -- let players pick the name others see on the list (/radioname)
     nameCommand     = 'radioname', -- /radioname Roger Scott  (/radioname on its own resets it)

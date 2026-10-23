@@ -215,6 +215,8 @@ button{font:inherit;color:inherit}
 .lcd.on .lcd-ch{color:var(--lcd-text);text-shadow:0 0 12px rgba(160,200,255,.35)}
 .lcd-ch.entering{color:var(--amber);animation:blink 1s steps(2) infinite}
 .lcd-ch.tuning{color:var(--amber)}
+.lcd-ch.long{font-size:27px;letter-spacing:2px}
+.lcd-ch.longer{font-size:23px;letter-spacing:1px}
 @keyframes blink{50%{opacity:.35}}
 
 .lcd-soft{
@@ -291,6 +293,8 @@ button{font:inherit;color:inherit}
 .key:active{transform:translateY(1px);box-shadow:0 1px 0 #050506,inset 0 2px 4px rgba(0,0,0,.55)}
 .key-clr{color:var(--amber)}
 .key-ent{color:var(--rx)}
+.key-dot{color:var(--amber);font-size:22px;line-height:.5}
+.key-dot small{margin-top:5px}
 .key:focus-visible,.soft:focus-visible,.side-key:focus-visible,.rk-ok:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
 
 .grille{
@@ -320,42 +324,50 @@ button{font:inherit;color:inherit}
 .lcd.rxon .lcd-ch{text-shadow:0 0 14px rgba(65,224,138,.45)}
 
 .rl{
+  --lc:#78aaff;--lc-rgb:120,170,255;--lc-text:#a9c6ea;--lc-hi:#e6f0ff;--lc-dim:#8ea6c4;--lc-bg1:rgba(16,36,58,.92);--lc-bg2:rgba(8,20,33,.92);
+  --tk:#41e08a;--tk-rgb:65,224,138;
   position:fixed;z-index:5;min-width:170px;max-width:260px;
   font-family:var(--sans);color:#e8eef6;pointer-events:none;
   animation:rlIn .25s cubic-bezier(.2,.9,.3,1);
+  transition:right .2s cubic-bezier(.2,.9,.3,1);
 }
 .rl[hidden]{display:none}
 @keyframes rlIn{from{opacity:0}}
 .pos-top-right{top:15vh;right:18px;text-align:right}
 .pos-top-left{top:15vh;left:18px}
 .pos-middle-right{top:42%;right:18px;transform:translateY(-50%);text-align:right}
+.radio-open .pos-top-right,.radio-open .pos-middle-right{right:calc(5vw + 180px * var(--scale) + 28px)}
 .pos-middle-left{top:42%;left:18px;transform:translateY(-50%)}
 .rl-head{
   display:inline-flex;align-items:center;gap:6px;padding:4px 9px 4px 7px;margin-bottom:5px;border-radius:7px;
-  background:linear-gradient(180deg,rgba(16,36,58,.92),rgba(8,20,33,.92));
-  border:1px solid rgba(120,170,255,.22);box-shadow:0 4px 14px rgba(0,0,0,.35),0 0 14px -6px rgba(120,170,255,.5);
-  font:700 11px/1 var(--mono);letter-spacing:1px;color:#a9c6ea;text-transform:uppercase;
+  background:linear-gradient(180deg,var(--lc-bg1),var(--lc-bg2));
+  border:1px solid rgba(var(--lc-rgb),.22);box-shadow:0 4px 14px rgba(0,0,0,.35),0 0 14px -6px rgba(var(--lc-rgb),.5);
+  font:700 11px/1 var(--mono);letter-spacing:1px;color:var(--lc-text);text-transform:uppercase;
 }
-.rl-head svg{width:12px;height:12px;fill:#a9c6ea}
-.rl-head em{font-style:normal;color:#e6f0ff}
-.rl-count{margin-left:2px;padding:2px 5px;border-radius:4px;background:rgba(255,255,255,.08);color:#8ea6c4;font-size:9.5px}
+.rl-head svg{width:12px;height:12px;fill:var(--lc-text)}
+.rl-head em{font-style:normal;color:var(--lc-hi)}
+.rl-count{margin-left:2px;padding:2px 5px;border-radius:4px;background:rgba(255,255,255,.08);color:var(--lc-dim);font-size:9.5px}
 .rl-row{
   display:flex;align-items:center;gap:7px;padding:2px 2px;justify-content:flex-start;
   font-size:13px;font-weight:600;line-height:1.35;
   text-shadow:0 1px 2px rgba(0,0,0,.95),0 0 6px rgba(0,0,0,.6);
   transition:color .12s;
 }
-.pos-top-right .rl-row,.pos-middle-right .rl-row{justify-content:flex-start;flex-direction:row-reverse}
+.rl{display:flex;flex-direction:column;align-items:center;text-align:center}
+.rl[hidden]{display:none}
+.rl-row{position:relative;justify-content:center}
+.rl-row .rl-wave{position:absolute;right:100%;top:50%;margin:-5.5px 6px 0 0}
+.rl-more{text-align:center}
 .rl-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
-.rl-row.me .rl-name::after{content:" \2022";color:#8ea6c4}
+.rl-row.me .rl-name::after{content:" \2022";color:var(--lc-dim)}
 .rl-wave{display:inline-flex;align-items:center;gap:1.5px;height:11px;width:14px;opacity:0;transition:opacity .12s}
 .rl-wave i{display:block;width:2px;height:4px;border-radius:1px;background:currentColor}
-.rl-row.talk{color:var(--rx)}
-.rl-row.talk .rl-name{text-shadow:0 1px 2px rgba(0,0,0,.95),0 0 10px rgba(65,224,138,.55)}
+.rl-row.talk{color:var(--tk)}
+.rl-row.talk .rl-name{text-shadow:0 1px 2px rgba(0,0,0,.95),0 0 10px rgba(var(--tk-rgb),.55)}
 .rl-row.talk .rl-wave{opacity:1}
 .rl-row.talk .rl-wave i{animation:wave .7s ease-in-out infinite}
 .rl-row.talk .rl-wave i:nth-child(2){animation-delay:.12s}
 .rl-row.talk .rl-wave i:nth-child(3){animation-delay:.24s}
 .rl-row.talk .rl-wave i:nth-child(4){animation-delay:.36s}
 @keyframes wave{0%,100%{height:3px}50%{height:11px}}
-.rl-more{font-size:11px;color:#8ea6c4;padding-top:2px;text-shadow:0 1px 2px #000}
+.rl-more{font-size:11px;color:var(--lc-dim);padding-top:2px;text-shadow:0 1px 2px #000}
